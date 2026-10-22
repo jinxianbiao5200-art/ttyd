@@ -144,6 +144,7 @@ export class Xterm {
     ) {}
 
     dispose() {
+        this.parent?.removeEventListener('paste', this.onImagePaste, true);
         this.reconnectKeyDisposable?.dispose();
         this.reconnectKeyDisposable = undefined;
         this.mobileKeyboard?.dispose();
@@ -207,6 +208,7 @@ export class Xterm {
         terminal.loadAddon(webLinksAddon);
 
         terminal.open(parent);
+        parent.addEventListener('paste', this.onImagePaste, true);
         this.syncPageBackground();
         this.syncViewport();
         fitAddon.fit();
@@ -460,7 +462,62 @@ export class Xterm {
     }
 
     @bind
+    private onImagePaste(event: ClipboardEvent) {
+        const items = event.clipboardData?.items;
+        if (!items) return;
+        for (const item of Array.from(items)) {
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (!file) continue;
+                event.preventDefault();
+                event.stopPropagation();
+                void this.uploadImage(file);
+                return;
+            }
+        }
+    }
+
+    private async uploadImage(blob: Blob): Promise<boolean> {
+        const base = window.location.pathname.replace(/[/]+$/, '');
+        this.overlayAddon?.showOverlay('Uploading image...', 1000);
+        try {
+            const resp = await fetch(`${base}/upload`, {
+                method: 'POST',
+                headers: { 'Content-Type': blob.type || 'image/png' },
+                body: blob,
+                credentials: 'same-origin',
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const { path } = (await resp.json()) as { path: string };
+            this.terminal?.paste(path + ' ');
+            this.overlayAddon?.showOverlay('Image uploaded', 500);
+            return true;
+        } catch (e) {
+            console.warn('[ttyd] image upload failed', e);
+            this.overlayAddon?.showOverlay('Image upload failed', 1000);
+            return false;
+        }
+    }
+
+    private async pasteImageFromClipboard(): Promise<boolean> {
+        if (typeof navigator.clipboard?.read !== 'function') return false;
+        try {
+            for (const item of await navigator.clipboard.read()) {
+                const type = item.types.find(t => t.startsWith('image/'));
+                if (type) {
+                    this.mobileKeyboard?.clearModifiers();
+                    return await this.uploadImage(await item.getType(type));
+                }
+            }
+        } catch (e) {
+            // fall back to text
+        }
+        return false;
+    }
+
+    @bind
     private async pasteFromClipboard() {
+        if (await this.pasteImageFromClipboard()) return;
         if (!navigator.clipboard?.readText) {
             this.overlayAddon?.showOverlay('Paste unsupported', 700);
             return;

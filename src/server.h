@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <libwebsockets.h>
 #include <stdbool.h>
 #include <uv.h>
@@ -34,6 +35,11 @@ struct pss_http {
   char *buffer;
   char *ptr;
   size_t len;
+  FILE *upload_fp;
+  size_t upload_len;
+  bool upload_err;
+  char upload_tmp[512];
+  char upload_path[512];
 };
 
 struct pss_tty {
