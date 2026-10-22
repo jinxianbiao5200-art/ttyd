@@ -312,14 +312,14 @@ int callback_http(struct lws *wsi, enum lws_callback_reasons reason, void *user,
       goto try_to_reuse;
 
     case LWS_CALLBACK_HTTP_BODY:
-      if (pss->upload_fp == NULL) break;
+      if (pss == NULL || pss->upload_fp == NULL) break;
       if (pss->upload_err) break;
       pss->upload_len += len;
       if (pss->upload_len > UPLOAD_MAX_BYTES || fwrite(in, 1, len, pss->upload_fp) != len) pss->upload_err = true;
       break;
 
     case LWS_CALLBACK_HTTP_BODY_COMPLETION:
-      if (pss->upload_fp == NULL) break;
+      if (pss == NULL || pss->upload_fp == NULL) break;
       if (pss->upload_err || pss->upload_len == 0 || fclose(pss->upload_fp) != 0) {
         bool too_big = pss->upload_len > UPLOAD_MAX_BYTES;
         upload_cleanup(pss);
@@ -344,7 +344,7 @@ int callback_http(struct lws *wsi, enum lws_callback_reasons reason, void *user,
       break;
 
     case LWS_CALLBACK_CLOSED_HTTP:
-      upload_cleanup(pss);
+      if (pss != NULL) upload_cleanup(pss);
       break;
 
     case LWS_CALLBACK_HTTP_FILE_COMPLETION:
